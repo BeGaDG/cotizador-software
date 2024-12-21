@@ -116,10 +116,6 @@ export default function CotizadorSoftware() {
     setMeses(trabajador.meses.toString())
     setEditingIndex(index)
   }
-  const eliminarTrabajador = (index: number) => {
-    const nuevosTrabajadores = trabajadores.filter((_, i) => i !== index)
-    setTrabajadores(nuevosTrabajadores)
-  }
 
   const agregarTrabajador = () => {
     if (nombre && rol && sueldo && meses) {
@@ -451,7 +447,7 @@ export default function CotizadorSoftware() {
                 <div className="bg-black/30 rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
-                      <TableRow className="hover:bg-[#A333A5AC]/10">
+                      <TableRow className="hover:bg-[#A5A5AC]/10">
                         <TableHead className="text-[#F2F2F2]">Fase</TableHead>
                         <TableHead className="text-[#F2F2F2]">Meses</TableHead>
                         <TableHead className="text-[#F2F2F2]">Valor</TableHead>
