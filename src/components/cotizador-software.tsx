@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +9,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
 
+// Definición de interfaces
 interface Trabajador {
   nombre: string
   rol: string
@@ -25,11 +26,25 @@ interface Fase {
   meses: number
 }
 
-function formatNumber(num: number): string {
-  return num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Funciones de utilidad
+const formatNumber = (num: number): string => {
+  return new Intl.NumberFormat('es-ES', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  }).format(num);
 }
 
+const formatLargeNumber = (num: number): string => {
+  if (num < 1000000) return formatNumber(num);
+  const abbreviations = ["", "M", "MM", "B"];
+  const order = Math.floor(Math.log10(num) / 3);
+  const abbreviated = (num / Math.pow(1000, order)).toFixed(1);
+  return `${abbreviated}${abbreviations[order]}`;
+}
+
+// Componente principal
 export default function CotizadorSoftware() {
+  // Estados
   const [trabajadores, setTrabajadores] = useState<Trabajador[]>([
     { nombre: "Empresa", rol: "Empresa", sueldo: 0, meses: 18, anticipoAsignado: 0, anticipoPorMes: 0, esEmpresa: true, porcentaje: 15 },
     { nombre: "Bernardo Galvan", rol: "Diseñador UI/UX", sueldo: 0, meses: 0, anticipoAsignado: 0, anticipoPorMes: 0 },
@@ -39,14 +54,12 @@ export default function CotizadorSoftware() {
     { nombre: "Javier Alvarez", rol: "Gerente Comercial", sueldo: 0, meses: 0, anticipoAsignado: 0, anticipoPorMes: 0 },
     { nombre: "Eduard Martinez", rol: "Desarrollador Frontend/Data Analyst", sueldo: 0, meses: 0, anticipoAsignado: 0, anticipoPorMes: 0 }
   ])
-
   const [fases, setFases] = useState<Fase[]>([
     { nombre: "MVP", meses: 0 },
     { nombre: "2 fase", meses: 0 },
     { nombre: "3 fase", meses: 0 },
     { nombre: "4 fase", meses: 0 }
   ])
-
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [nombre, setNombre] = useState('')
   const [rol, setRol] = useState('')
@@ -64,60 +77,75 @@ export default function CotizadorSoftware() {
   const [sueldoGlobal, setSueldoGlobal] = useState('')
   const [nuevaFase, setNuevaFase] = useState<Fase>({ nombre: '', meses: 0 })
 
+  // Cálculo de valores financieros
   useEffect(() => {
-    const totalSueldos = trabajadores.filter(t => !t.esEmpresa).reduce((sum, t) => sum + t.sueldo * t.meses, 0)
-    const porcentajeEmpresaTotal = totalSueldos * (parseFloat(porcentajeEmpresa) / 100);
-    const porcentajePSMTotal = totalSueldos * (parseFloat(porcentajePSM) / 100);
-    const nuevoValorTotalProyecto = totalSueldos + porcentajeEmpresaTotal + porcentajePSMTotal;
-    setValorTotalProyecto(nuevoValorTotalProyecto)
+    const calcularValoresFinancieros = () => {
+      const totalSueldos = trabajadores.filter(t => !t.esEmpresa).reduce((sum, t) => sum + t.sueldo * t.meses, 0)
+      const porcentajeEmpresaTotal = totalSueldos * (parseFloat(porcentajeEmpresa) / 100);
+      const porcentajePSMTotal = totalSueldos * (parseFloat(porcentajePSM) / 100);
+      const nuevoValorTotalProyecto = totalSueldos + porcentajeEmpresaTotal + porcentajePSMTotal;
+      setValorTotalProyecto(nuevoValorTotalProyecto)
 
-    const iva = nuevoValorTotalProyecto * (parseFloat(porcentajeIVA) / 100)
-    const retefuente = nuevoValorTotalProyecto * (parseFloat(porcentajeRetefuente) / 100)
-    const nuevoAnticipoTotal = nuevoValorTotalProyecto * (parseFloat(porcentajeAnticipo) / 100)
-    setAnticipoTotal(nuevoAnticipoTotal)
+      const iva = nuevoValorTotalProyecto * (parseFloat(porcentajeIVA) / 100)
+      const retefuente = nuevoValorTotalProyecto * (parseFloat(porcentajeRetefuente) / 100)
+      const nuevoAnticipoTotal = nuevoValorTotalProyecto * (parseFloat(porcentajeAnticipo) / 100)
+      setAnticipoTotal(nuevoAnticipoTotal)
 
-    const nuevoPrecioFinal = nuevoValorTotalProyecto + iva - retefuente - nuevoAnticipoTotal
-    setPrecioFinalProyecto(nuevoPrecioFinal)
+      const nuevoPrecioFinal = nuevoValorTotalProyecto + iva - retefuente - nuevoAnticipoTotal
+      setPrecioFinalProyecto(nuevoPrecioFinal)
 
-    const anticipoEmpresa = nuevoAnticipoTotal * (parseFloat(porcentajeEmpresa) / 100)
-    const anticipoTrabajadores = nuevoAnticipoTotal - anticipoEmpresa
+      const anticipoEmpresa = nuevoAnticipoTotal * (parseFloat(porcentajeEmpresa) / 100)
+      const anticipoTrabajadores = nuevoAnticipoTotal - anticipoEmpresa
 
-    const trabajadoresActualizados = trabajadores.map(t => {
-      if (t.esEmpresa) {
-        return {
-          ...t,
-          sueldo: nuevoValorTotalProyecto * (parseFloat(porcentajeEmpresa) / 100) / t.meses,
-          anticipoAsignado: anticipoEmpresa,
-          anticipoPorMes: parseFloat(porcentajeAnticipo) === 100 ? 0 : anticipoEmpresa / t.meses
+      const trabajadoresActualizados = trabajadores.map(t => {
+        if (t.esEmpresa) {
+          return {
+            ...t,
+            sueldo: nuevoValorTotalProyecto * (parseFloat(porcentajeEmpresa) / 100) / t.meses,
+            anticipoAsignado: anticipoEmpresa,
+            anticipoPorMes: parseFloat(porcentajeAnticipo) === 100 ? 0 : anticipoEmpresa / t.meses
+          }
+        } else {
+          const anticipoAsignado = (t.sueldo * t.meses / totalSueldos) * anticipoTrabajadores
+          const sueldoRestante = t.sueldo * t.meses - anticipoAsignado
+          return {
+            ...t,
+            anticipoAsignado,
+            anticipoPorMes: parseFloat(porcentajeAnticipo) === 100 ? 0 : sueldoRestante / parseInt(mesesGlobal)
+          }
         }
-      } else {
-        const anticipoAsignado = (t.sueldo * t.meses / totalSueldos) * anticipoTrabajadores
-        const sueldoRestante = t.sueldo * t.meses - anticipoAsignado
-        return {
-          ...t,
-          anticipoAsignado,
-          anticipoPorMes: parseFloat(porcentajeAnticipo) === 100 ? 0 : sueldoRestante / parseInt(mesesGlobal)
-        }
+      })
+
+      if (JSON.stringify(trabajadoresActualizados) !== JSON.stringify(trabajadores)) {
+        setTrabajadores(trabajadoresActualizados)
       }
-    })
-
-    if (JSON.stringify(trabajadoresActualizados) !== JSON.stringify(trabajadores)) {
-      setTrabajadores(trabajadoresActualizados)
     }
+
+    calcularValoresFinancieros()
   }, [porcentajeEmpresa, porcentajeIVA, porcentajeRetefuente, porcentajeAnticipo, porcentajePSM, trabajadores, mesesGlobal])
 
-  const totalMesesProyecto = fases.reduce((sum, fase) => sum + fase.meses, 0)
+  // Cálculo del total de meses del proyecto
+  const totalMesesProyecto = useMemo(() => fases.reduce((sum, fase) => sum + fase.meses, 0), [fases])
 
-  const editarTrabajador = (index: number) => {
+  // Funciones de manejo de trabajadores
+  const editarTrabajador = useCallback((index: number) => {
     const trabajador = trabajadores[index]
     setNombre(trabajador.nombre)
     setRol(trabajador.rol)
     setSueldo(formatNumber(trabajador.sueldo))
     setMeses(trabajador.meses.toString())
     setEditingIndex(index)
-  }
+  }, [trabajadores])
 
-  const agregarTrabajador = () => {
+  const eliminarTrabajador = useCallback((index: number) => {
+    setTrabajadores(prev => {
+      const empresa = prev.find(t => t.esEmpresa);
+      const nuevosTrabajadores = prev.filter((t, i) => i !== index && !t.esEmpresa);
+      return empresa ? [empresa, ...nuevosTrabajadores] : nuevosTrabajadores;
+    });
+  }, []);
+
+  const agregarTrabajador = useCallback(() => {
     if (nombre && rol && sueldo && meses) {
       const nuevoTrabajador = { 
         nombre, 
@@ -128,103 +156,124 @@ export default function CotizadorSoftware() {
         anticipoPorMes: 0
       }
       if (editingIndex !== null) {
-        const nuevosTrabajadores = [...trabajadores]
-        nuevosTrabajadores[editingIndex] = nuevoTrabajador
-        setTrabajadores(nuevosTrabajadores)
+        setTrabajadores(prev => {
+          const nuevos = [...prev]
+          nuevos[editingIndex] = nuevoTrabajador
+          return nuevos
+        })
         setEditingIndex(null)
       } else {
-        setTrabajadores([...trabajadores, nuevoTrabajador])
+        setTrabajadores(prev => [...prev, nuevoTrabajador])
       }
       setNombre('')
       setRol('')
       setSueldo('')
       setMeses('18')
     }
-  }
+  }, [nombre, rol, sueldo, meses, editingIndex])
 
-  const editarFase = (index: number, campo: keyof Fase, valor: string) => {
-    const nuevasFases = [...fases]
-    const nuevoValor = campo === 'nombre' ? valor : parseInt(valor)
-    
-    if (campo === 'meses') {
-      const totalMesesActual = fases.reduce((sum, f, i) => i !== index ? sum + f.meses : sum, 0)
-      const mesesDisponibles = parseInt(mesesGlobal) - totalMesesActual
-      if (typeof nuevoValor === 'number' && nuevoValor > mesesDisponibles) {
-        alert(`No puedes asignar más de ${mesesDisponibles} meses a esta fase.`)
-        return
+  // Funciones de manejo de fases
+  const editarFase = useCallback((index: number, campo: keyof Fase, valor: string) => {
+    setFases(prev => {
+      const nuevas = [...prev]
+      const nuevoValor = campo === 'nombre' ? valor : parseInt(valor)
+      
+      if (campo === 'meses') {
+        const totalMesesActual = prev.reduce((sum, f, i) => i !== index ? sum + f.meses : sum, 0)
+        const mesesDisponibles = parseInt(mesesGlobal) - totalMesesActual
+        if (typeof nuevoValor === 'number' && nuevoValor > mesesDisponibles) {
+          alert(`No puedes asignar más de ${mesesDisponibles} meses a esta fase.`)
+          return prev
+        }
       }
+
+      nuevas[index] = {
+        ...nuevas[index],
+        [campo]: nuevoValor
+      }
+      return nuevas
+    })
+  }, [mesesGlobal])
+
+  const eliminarFase = useCallback((index: number) => {
+    setFases(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const agregarFase = useCallback(() => {
+    if (nuevaFase.nombre && nuevaFase.meses > 0) {
+      setFases(prev => [...prev, nuevaFase])
+      setNuevaFase({ nombre: '', meses: 0 })
     }
+  }, [nuevaFase])
 
-    nuevasFases[index] = {
-      ...nuevasFases[index],
-      [campo]: nuevoValor
-    }
-    setFases(nuevasFases)
-  }
-
-  const eliminarFase = (index: number) => {
-    const nuevasFases = fases.filter((_, i) => i !== index)
-    setFases(nuevasFases)
-  }
-
-  const aplicarCambiosGlobales = () => {
+  // Función para aplicar cambios globales
+  const aplicarCambiosGlobales = useCallback(() => {
     const nuevosMeses = parseInt(mesesGlobal)
     const nuevoSueldo = parseFloat(sueldoGlobal.replace(/\./g, '').replace(',', '.'))
     
     if (!isNaN(nuevosMeses) && !isNaN(nuevoSueldo)) {
-      const trabajadoresActualizados = trabajadores.map(t => 
+      setTrabajadores(prev => prev.map(t => 
         t.esEmpresa ? t : { ...t, meses: nuevosMeses, sueldo: nuevoSueldo }
-      )
-      setTrabajadores(trabajadoresActualizados)
+      ))
     }
-  }
+  }, [mesesGlobal, sueldoGlobal])
 
-  const agregarFase = () => {
-    if (nuevaFase.nombre && nuevaFase.meses > 0) {
-      setFases([...fases, nuevaFase])
-      setNuevaFase({ nombre: '', meses: 0 })
-    }
-  }
+  // Obtener la información de la empresa
+  const empresa = useMemo(() => trabajadores.find(t => t.esEmpresa), [trabajadores])
 
-  const empresa = trabajadores.find(t => t.esEmpresa)
+  // Componente para mostrar valores numéricos
+  const DisplayValue: React.FC<{ value: number }> = ({ value }) => (
+    <>
+      <span className="hidden sm:inline">${formatNumber(value)}</span>
+      <span className="sm:hidden">${formatLargeNumber(value)}</span>
+    </>
+  );
 
   return (
     <Card className="w-full max-w-7xl mx-auto bg-[#282525]">
       <CardHeader className="border-b border-[#A5A5AC]/20 bg-black">
-        <CardTitle className="text-[#F2F2F2] text-2xl">Cotizador de Software</CardTitle>
+        <CardTitle className="text-[#F2F2F2] text-xl sm:text-2xl">Cotizador de Software</CardTitle>
       </CardHeader>
-      <CardContent className="p-6 text-[#F2F2F2]">
+      <CardContent className="p-4 sm:p-6 text-[#F2F2F2]">
         <div className="space-y-6">
-          <div className="bg-[#FE4D01] p-6 rounded-lg mb-6">
-            <h3 className="text-xl font-semibold mb-4 text-[#F2F2F2]">Información de la Empresa</h3>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Información de la Empresa */}
+          <div className="bg-[#FE4D01] p-4 sm:p-6 rounded-lg mb-6">
+            <h3 className="text-lg sm:text-xl font-semibold mb-4 text-[#F2F2F2]">Información de la Empresa</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label className="text-[#F2F2F2]">Porcentaje de la empresa</Label>
-                <div className="text-2xl font-bold">{porcentajeEmpresa}%</div>
+                <Label className="text-[#F2F2F2] text-sm">Porcentaje de la empresa</Label>
+                <div className="text-xl sm:text-2xl font-bold">{porcentajeEmpresa}%</div>
               </div>
               <div>
-                <Label className="text-[#F2F2F2]">Meses del proyecto</Label>
-                <div className="text-2xl font-bold">{mesesGlobal}</div>
+                <Label className="text-[#F2F2F2] text-sm">Meses del proyecto</Label>
+                <div className="text-xl sm:text-2xl font-bold">{mesesGlobal}</div>
               </div>
               <div>
-                <Label className="text-[#F2F2F2]">Anticipo Total</Label>
-                <div className="text-2xl font-bold">${formatNumber(empresa?.anticipoAsignado || 0)}</div>
+                <Label className="text-[#F2F2F2] text-sm">Anticipo Total</Label>
+                <div className="text-xl sm:text-2xl font-bold">
+                  <DisplayValue value={empresa?.anticipoAsignado || 0} />
+                </div>
               </div>
               <div>
-                <Label className="text-[#F2F2F2]">Anticipo por Mes</Label>
-                <div className="text-2xl font-bold">${formatNumber(empresa?.anticipoPorMes || 0)}</div>
+                <Label className="text-[#F2F2F2] text-sm">Anticipo por Mes</Label>
+                <div className="text-xl sm:text-2xl font-bold">
+                  <DisplayValue value={empresa?.anticipoPorMes || 0} />
+                </div>
               </div>
-              <div>
-                <Label className="text-[#F2F2F2]">Ganancia Total de la Empresa</Label>
-                <div className="text-2xl font-bold">${formatNumber((empresa?.sueldo ?? 0) * (empresa?.meses ?? 0))}</div>
+              <div className="sm:col-span-2">
+                <Label className="text-[#F2F2F2] text-sm">Ganancia Total de la Empresa</Label>
+                <div className="text-xl sm:text-2xl font-bold">
+                  <DisplayValue value={(empresa?.sueldo ?? 0) * (empresa?.meses ?? 0)} />
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl bg-black/50 p-6 rounded-lg">
+          {/* Tabla de Integrantes del Equipo */}
+          <div className="rounded-xl bg-black/50 p-4 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">Integrantes del equipo</h3>
-            <div className="bg-black/30 rounded-lg overflow-hidden">
-              <Table >
+            <div className="bg-black/30 rounded-lg overflow-x-auto">
+              <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-[#A5A5AC]/10">
                     <TableHead className="text-[#F2F2F2]">Nombre</TableHead>
@@ -234,7 +283,7 @@ export default function CotizadorSoftware() {
                     <TableHead className="text-[#F2F2F2]">Total</TableHead>
                     <TableHead className="text-[#F2F2F2]">Anticipo Total</TableHead>
                     <TableHead className="text-[#F2F2F2]">Anticipo por Mes</TableHead>
-                    <TableHead className="text-[#F2F2F2]"></TableHead>
+                    <TableHead className="text-[#F2F2F2]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -244,18 +293,36 @@ export default function CotizadorSoftware() {
                       <TableCell className="text-[#F2F2F2]">{t.rol}</TableCell>
                       <TableCell className="text-[#F2F2F2]">${formatNumber(t.sueldo)}</TableCell>
                       <TableCell className="text-[#F2F2F2]">{t.meses}</TableCell>
-                      <TableCell className="text-[#F2F2F2]">${formatNumber(t.sueldo * t.meses)}</TableCell>
-                      <TableCell className="text-[#F2F2F2]">${formatNumber(t.anticipoAsignado || 0)}</TableCell>
-                      <TableCell className="text-[#F2F2F2]">${formatNumber(t.anticipoPorMes || 0)}</TableCell>
+                      <TableCell className="text-[#F2F2F2]">
+                        <DisplayValue value={t.sueldo * t.meses} />
+                      </TableCell>
+                      <TableCell className="text-[#F2F2F2]">
+                        <DisplayValue value={t.anticipoAsignado || 0} />
+                      </TableCell>
+                      <TableCell className="text-[#F2F2F2]">
+                        <DisplayValue value={t.anticipoPorMes || 0} />
+                      </TableCell>
                       <TableCell>
-                        <Button 
-                          onClick={() => editarTrabajador(index + 1)}
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 p-0 hover:bg-[#FF4B00]/10"
-                        >
-                          <Pencil className="h-4 w-4 text-[#FF4B00]" />
-                        </Button>
+                        <div className="flex space-x-2">
+                          <Button 
+                            onClick={() => editarTrabajador(trabajadores.indexOf(t))}
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 p-0 hover:bg-[#FF4B00]/10"
+                          >
+                            <Pencil className="h-4 w-4 text-[#FF4B00]" />
+                            <span className="sr-only">Editar trabajador</span>
+                          </Button>
+                          <Button 
+                            onClick={() => eliminarTrabajador(trabajadores.indexOf(t))}
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 p-0 hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <span className="sr-only">Eliminar trabajador</span>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -264,9 +331,12 @@ export default function CotizadorSoftware() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            <div className="space-y-6 xl:col-span-1 bg-black/50 p-6 rounded-lg">
-              <h3 className="text-lg font-semibold mb-4">Agregar Trabajador</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {/* Sección para Agregar/Editar Trabajador */}
+            <div className="space-y-6 bg-black/50 p-4 sm:p-6 rounded-lg">
+              <h3 className="text-lg font-semibold mb-4">
+                {editingIndex !== null ? 'Editar Trabajador' : 'Agregar Trabajador'}
+              </h3>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="nombre">Nombre del trabajador</Label>
@@ -325,6 +395,7 @@ export default function CotizadorSoftware() {
 
               <Separator className="my-6 bg-[#A5A5AC]/20" />
 
+              {/* Sección de Cambios Globales */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Cambios Globales</h3>
                 <div>
@@ -365,7 +436,8 @@ export default function CotizadorSoftware() {
               </div>
             </div>
 
-            <div className="space-y-6 xl:col-span-1 bg-black/50 p-6 rounded-lg">
+            {/* Sección de Configuración del Proyecto */}
+            <div className="space-y-6 bg-black/50 p-4 sm:p-6 rounded-lg">
               <h3 className="text-lg font-semibold mb-4">Configuración del Proyecto</h3>
               <div className="space-y-4">
                 <div>
@@ -442,12 +514,13 @@ export default function CotizadorSoftware() {
 
               <Separator className="my-6 bg-[#A5A5AC]/20" />
 
+              {/* Sección de Fases del Proyecto */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Fases del Proyecto</h3>
-                <div className="bg-black/30 rounded-lg overflow-hidden">
+                <div className="bg-black/30 rounded-lg overflow-x-auto">
                   <Table>
                     <TableHeader>
-                      <TableRow className="hover:bg-[#A5A5AC]/10">
+                      <TableRow className="hover:bg-[#A333A5AC]/10">
                         <TableHead className="text-[#F2F2F2]">Fase</TableHead>
                         <TableHead className="text-[#F2F2F2]">Meses</TableHead>
                         <TableHead className="text-[#F2F2F2]">Valor</TableHead>
@@ -467,7 +540,7 @@ export default function CotizadorSoftware() {
                             />
                           </TableCell>
                           <TableCell className="text-[#F2F2F2]">
-                            ${formatNumber((fase.meses / totalMesesProyecto) * valorTotalProyecto)}
+                            <DisplayValue value={(fase.meses / totalMesesProyecto) * valorTotalProyecto} />
                           </TableCell>
                           <TableCell>
                             <Button
@@ -477,6 +550,7 @@ export default function CotizadorSoftware() {
                               className="h-8 w-8 p-0 hover:bg-red-500/10"
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
+                              <span className="sr-only">Eliminar fase</span>
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -484,12 +558,12 @@ export default function CotizadorSoftware() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                   <Input
                     placeholder="Nombre de la fase"
                     value={nuevaFase.nombre}
                     onChange={(e) => setNuevaFase({ ...nuevaFase, nombre: e.target.value })}
-                    className="bg-[#F2F2F2] text-black"
+                    className="bg-[#F2F2F2] text-black flex-grow"
                   />
                   <Input
                     type="number"
@@ -508,50 +582,71 @@ export default function CotizadorSoftware() {
               </div>
             </div>
 
-            <div className="space-y-6 xl:col-span-1 bg-black/50 p-6 rounded-lg">
+            {/* Sección de Resumen Financiero */}
+            <div className="space-y-6 bg-black/50 p-4 sm:p-6 rounded-lg lg:col-span-2 xl:col-span-1">
               <h3 className="text-lg font-semibold mb-4">Resumen Financiero</h3>
               <div className="space-y-4 bg-black/30 p-4 rounded-lg">
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Valor sin Utilidad:</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto / (1 + parseFloat(porcentajeEmpresa) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto / (1 + parseFloat(porcentajeEmpresa) / 100)} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Valor con Utilidad:</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto)}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Valor con PSM:</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100)} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Valor con IVA:</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (1 + parseFloat(porcentajeIVA) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (1 + parseFloat(porcentajeIVA) / 100)} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Valor con Retefuente:</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (1 + parseFloat(porcentajeIVA) / 100) * (1 + parseFloat(porcentajeRetefuente) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (1 + parseFloat(porcentajeIVA) / 100) * (1 + parseFloat(porcentajeRetefuente) / 100)} />
+                  </span>
                 </div>
                 <Separator className="my-2 bg-[#A5A5AC]/20" />
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">IVA ({porcentajeIVA}%):</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (parseFloat(porcentajeIVA) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (parseFloat(porcentajeIVA) / 100)} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Retefuente ({porcentajeRetefuente}%):</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (parseFloat(porcentajeRetefuente) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (1 + parseFloat(porcentajePSM) / 100) * (parseFloat(porcentajeRetefuente) / 100)} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">Anticipo Total ({porcentajeAnticipo}%):</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(anticipoTotal)}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={anticipoTotal} />
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 items-center gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
                   <Label className="text-[#A5A5AC]">PSM ({porcentajePSM}%):</Label>
-                  <span className="text-[#F2F2F2]">${formatNumber(valorTotalProyecto * (parseFloat(porcentajePSM) / 100))}</span>
+                  <span className="text-[#F2F2F2]">
+                    <DisplayValue value={valorTotalProyecto * (parseFloat(porcentajePSM) / 100)} />
+                  </span>
                 </div>
                 <Separator className="my-2 bg-[#A5A5AC]/20" />
-                <div className="grid grid-cols-2 items-center gap-4">
-                  <Label className="text-xl font-bold text-[#FF4B00]">Valor Restante:</Label>
-                  <span className="text-xl font-bold text-[#FF4B00]">${formatNumber(precioFinalProyecto)}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
+                  <Label className="text-lg sm:text-xl font-bold text-[#FF4B00]">Valor Restante:</Label>
+                  <span className="text-lg sm:text-xl font-bold text-[#FF4B00]">
+                    <DisplayValue value={precioFinalProyecto} />
+                  </span>
                 </div>
               </div>
             </div>
